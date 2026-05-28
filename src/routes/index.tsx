@@ -128,7 +128,9 @@ function DashboardPage() {
                 <Badge
                   variant="outline"
                   className={
-                    f.demand === "High"
+                    f.demand === "Spike"
+                      ? "bg-destructive/15 text-destructive border-destructive/30"
+                      : f.demand === "High"
                       ? "bg-accent text-accent-foreground border-transparent"
                       : f.demand === "Medium"
                       ? "bg-info/15 text-info border-info/30"
@@ -149,16 +151,22 @@ function DashboardPage() {
 
       <Card>
         <CardContent className="p-5">
-          <div className="font-semibold mb-2">How JerseyBecho AI works</div>
+          <div className="font-semibold mb-1">Inventory-first AI architecture</div>
+          <p className="text-xs text-muted-foreground mb-3">
+            JerseyBecho AI uses an inventory-first AI architecture. Instead of giving random
+            chatbot answers, it first checks structured stock data, then explains the match,
+            then generates a safe customer reply, and finally updates demand forecasting
+            signals for future restock decisions.
+          </p>
           <ol className="grid md:grid-cols-7 gap-2 text-xs text-muted-foreground">
             {[
-              "Seller adds jersey stock",
-              "Customer asks on Messenger/WhatsApp",
-              "System extracts team, player, size, year",
-              "Inventory engine checks real stock",
-              "AI reply engine gives safe answer",
-              "Forecast engine predicts demand",
-              "Seller gets restock recommendation",
+              "Customer Message",
+              "Entity Detection",
+              "Inventory Match",
+              "Safe Reply",
+              "Demand Signal",
+              "Forecast Score (DSS)",
+              "Restock Action",
             ].map((s, i) => (
               <li
                 key={i}
