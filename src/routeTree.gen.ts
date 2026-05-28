@@ -9,8 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as QuerySimRouteImport } from './routes/query-sim'
+import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as ForecastRouteImport } from './routes/forecast'
+import { Route as AiAdvisorRouteImport } from './routes/ai-advisor'
+import { Route as AddProductRouteImport } from './routes/add-product'
 import { Route as IndexRouteImport } from './routes/index'
 
+const QuerySimRoute = QuerySimRouteImport.update({
+  id: '/query-sim',
+  path: '/query-sim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryRoute = InventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForecastRoute = ForecastRouteImport.update({
+  id: '/forecast',
+  path: '/forecast',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiAdvisorRoute = AiAdvisorRouteImport.update({
+  id: '/ai-advisor',
+  path: '/ai-advisor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddProductRoute = AddProductRouteImport.update({
+  id: '/add-product',
+  path: '/add-product',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +49,102 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/add-product': typeof AddProductRoute
+  '/ai-advisor': typeof AiAdvisorRoute
+  '/forecast': typeof ForecastRoute
+  '/inventory': typeof InventoryRoute
+  '/query-sim': typeof QuerySimRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/add-product': typeof AddProductRoute
+  '/ai-advisor': typeof AiAdvisorRoute
+  '/forecast': typeof ForecastRoute
+  '/inventory': typeof InventoryRoute
+  '/query-sim': typeof QuerySimRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/add-product': typeof AddProductRoute
+  '/ai-advisor': typeof AiAdvisorRoute
+  '/forecast': typeof ForecastRoute
+  '/inventory': typeof InventoryRoute
+  '/query-sim': typeof QuerySimRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/add-product'
+    | '/ai-advisor'
+    | '/forecast'
+    | '/inventory'
+    | '/query-sim'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/add-product'
+    | '/ai-advisor'
+    | '/forecast'
+    | '/inventory'
+    | '/query-sim'
+  id:
+    | '__root__'
+    | '/'
+    | '/add-product'
+    | '/ai-advisor'
+    | '/forecast'
+    | '/inventory'
+    | '/query-sim'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AddProductRoute: typeof AddProductRoute
+  AiAdvisorRoute: typeof AiAdvisorRoute
+  ForecastRoute: typeof ForecastRoute
+  InventoryRoute: typeof InventoryRoute
+  QuerySimRoute: typeof QuerySimRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/query-sim': {
+      id: '/query-sim'
+      path: '/query-sim'
+      fullPath: '/query-sim'
+      preLoaderRoute: typeof QuerySimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory': {
+      id: '/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forecast': {
+      id: '/forecast'
+      path: '/forecast'
+      fullPath: '/forecast'
+      preLoaderRoute: typeof ForecastRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-advisor': {
+      id: '/ai-advisor'
+      path: '/ai-advisor'
+      fullPath: '/ai-advisor'
+      preLoaderRoute: typeof AiAdvisorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/add-product': {
+      id: '/add-product'
+      path: '/add-product'
+      fullPath: '/add-product'
+      preLoaderRoute: typeof AddProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +157,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AddProductRoute: AddProductRoute,
+  AiAdvisorRoute: AiAdvisorRoute,
+  ForecastRoute: ForecastRoute,
+  InventoryRoute: InventoryRoute,
+  QuerySimRoute: QuerySimRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
