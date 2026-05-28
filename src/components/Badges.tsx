@@ -17,14 +17,16 @@ export function StatusBadge({ status }: { status: Status }) {
 }
 
 export function TrendBadge({ trend }: { trend: TrendSignal }) {
-  const cls = {
+  const cls: Record<TrendSignal, string> = {
     High: "bg-accent text-accent-foreground border-transparent",
     Medium: "bg-info/15 text-info border-info/30",
     Low: "bg-muted text-muted-foreground border-border",
-  }[trend];
+    None: "bg-muted/50 text-muted-foreground border-border",
+  };
   return (
-    <Badge variant="outline" className={cn("font-medium", cls)}>
+    <Badge variant="outline" className={cn("font-medium", cls[trend])}>
       {trend}
     </Badge>
   );
 }
+

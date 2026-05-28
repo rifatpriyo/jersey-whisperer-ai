@@ -4,7 +4,7 @@ export type SourceCountry = "China" | "Thailand" | "Bangladesh";
 export type KitType = "Home" | "Away" | "Third" | "Retro";
 export type Size = "S" | "M" | "L" | "XL" | "XXL";
 export type Status = "Available" | "Low Stock" | "Out of Stock" | "Preorder";
-export type TrendSignal = "Low" | "Medium" | "High";
+export type TrendSignal = "None" | "Low" | "Medium" | "High";
 export type Channel = "Messenger" | "WhatsApp" | "Manual" | "Instagram";
 
 export interface Variant {
@@ -40,6 +40,12 @@ export interface Product {
   variants: Variant[];
 }
 
+export interface FallbackMatch {
+  product_id: string;
+  product_name: string;
+  reason: string;
+}
+
 export interface QueryReasoning {
   original: string;
   normalized: string;
@@ -52,6 +58,7 @@ export interface QueryReasoning {
   detected_kit?: KitType;
   matched_product_id?: string;
   matched_product_name?: string;
+  closest_fallback?: FallbackMatch;
   confidence: number;
   reason: string;
   reply: string;

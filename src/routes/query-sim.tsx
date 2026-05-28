@@ -17,12 +17,12 @@ export const Route = createFileRoute("/query-sim")({
 
 const TESTS = [
   "Argentina Messi XL ase?",
+  "vai argentina away hobe?",
   "Brazil Neymar retro L ache?",
   "Spain away 2026 WC kit ase?",
   "Portugal Ronaldo L available?",
   "Bangladesh national team jersey L size ache?",
   "Real Madrid Bellingham M size available?",
-  "Thailand imported player edition ase?",
   "Argentina 2006 retro M ache?",
 ];
 
@@ -32,7 +32,7 @@ interface Turn {
 }
 
 function QueryPage() {
-  const { products } = useStore();
+  const { products, incrementQueryCount } = useStore();
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
 
@@ -40,6 +40,9 @@ function QueryPage() {
     if (!q.trim()) return;
     const result = matchQuery(q, products);
     setTurns((t) => [{ query: q, result }, ...t]);
+    // Update query_count for demand signal feedback loop
+    const targetId = result.matched_product_id || result.closest_fallback?.product_id;
+    if (targetId) incrementQueryCount(targetId);
     setInput("");
   };
 
@@ -47,7 +50,7 @@ function QueryPage() {
     <>
       <PageHeader
         title="Customer Query Simulation"
-        subtitle="Test how the future 24/7 AI sales assistant will reply — inventory-aware, never hallucinated"
+        subtitle="Test how the 24/7 AI sales assistant replies — inventory-aware, never hallucinated. Each matched query also increases the product's demand signal."
       />
 
       <Card className="mb-4">
@@ -140,17 +143,31 @@ function QueryPage() {
                   <Row k="Normalized" v={t.result.normalized} />
                   <Row k="Detected team" v={t.result.detected_team} />
                   <Row k="Detected player" v={t.result.detected_player} />
+                  <Row k="Detected kit" v={t.result.detected_kit} />
                   <Row k="Detected year" v={t.result.detected_year} />
                   <Row k="Detected size" v={t.result.detected_size} />
-                  <Row k="Detected edition" v={t.result.detected_edition} />
-                  <Row k="Detected source" v={t.result.detected_source} />
-                  <Row k="Best match" v={t.result.matched_product_name} />
-                  <Row k="Inventory source" v={t.result.matched_product_id ? "Real inventory record" : "—"} />
+                  <Row k="Best exact match" v={t.result.matched_product_name} />
+                  <Row k="Closest fallback" v={t.result.closest_fallback?.product_name} />
+                  <Row
+                    k="Inventory source"
+                    v={
+                      t.result.matched_product_id
+                        ? "Real inventory record"
+                        : t.result.closest_fallback
+                        ? "Fallback inventory record"
+                        : "—"
+                    }
+                  />
                 </div>
 
                 <div className="mt-3 p-2 rounded-md bg-background border border-border text-xs">
                   <div className="font-semibold mb-1">Reason</div>
                   <div className="text-muted-foreground">{t.result.reason}</div>
+                  {!t.result.matched_product_id && t.result.closest_fallback && (
+                    <div className="mt-1.5 text-muted-foreground italic">
+                      Exact match not found. Closest inventory product found based on team/player.
+                    </div>
+                  )}
                 </div>
 
                 {t.result.candidates && t.result.candidates.length > 0 && (

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Product } from "./types";
 import { seedProducts } from "./seed-data";
 
-const STORAGE_KEY = "jerseybecho_products_v1";
+const STORAGE_KEY = "jerseybecho_products_v3";
 
 interface Ctx {
   products: Product[];
@@ -10,10 +10,22 @@ interface Ctx {
   addProduct: (p: Product) => void;
   updateProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
+  incrementQueryCount: (id: string) => void;
   resetDemo: () => void;
 }
 
 const StoreContext = createContext<Ctx | null>(null);
+
+function sanitize(list: any): Product[] {
+  if (!Array.isArray(list)) return seedProducts;
+  return list.map((p) => ({
+    ...p,
+    trend_signal: p?.trend_signal ?? "None",
+    trend_reason: p?.trend_reason ?? "",
+    query_count: Number.isFinite(p?.query_count) ? p.query_count : 0,
+    variants: Array.isArray(p?.variants) ? p.variants : [],
+  })) as Product[];
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProductsState] = useState<Product[]>(seedProducts);
@@ -21,14 +33,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setProductsState(JSON.parse(raw));
+      if (raw) setProductsState(sanitize(JSON.parse(raw)));
     } catch {}
   }, []);
 
   const setProducts = (p: Product[]) => {
-    setProductsState(p);
+    const clean = sanitize(p);
+    setProductsState(clean);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
     } catch {}
   };
 
@@ -40,6 +53,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         addProduct: (p) => setProducts([p, ...products]),
         updateProduct: (p) => setProducts(products.map((x) => (x.id === p.id ? p : x))),
         deleteProduct: (id) => setProducts(products.filter((x) => x.id !== id)),
+        incrementQueryCount: (id) =>
+          setProducts(
+            products.map((x) =>
+              x.id === id ? { ...x, query_count: (x.query_count || 0) + 1 } : x,
+            ),
+          ),
         resetDemo: () => setProducts(seedProducts),
       }}
     >
