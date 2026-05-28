@@ -82,7 +82,9 @@ function DashboardPage() {
     [products],
   );
   const highDemand = forecasts.filter((f) => f.demand === "High");
-  const restockAlerts = forecasts.filter((f) => f.action === "Restock" || f.action === "Preorder");
+  const restockAlerts = forecasts.filter(
+    (f) => f.action === "Buy Now" || f.action === "Restock Soon" || f.action === "Preorder / Restock",
+  );
 
   return (
     <>
