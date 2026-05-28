@@ -1,4 +1,4 @@
-import type { Product, QueryReasoning, Size, EditionType, SourceCountry, KitType } from "./types";
+import type { Product, QueryReasoning, Size, EditionType, SourceCountry, KitType, FallbackMatch } from "./types";
 import { bdt } from "./inventory-utils";
 
 const SIZE_WORDS: Record<string, Size> = {
@@ -8,9 +8,6 @@ const SIZE_WORDS: Record<string, Size> = {
   xl: "XL", "extra large": "XL", "extra-large": "XL",
   xxl: "XXL", "double xl": "XXL",
 };
-
-const AVAIL_WORDS = ["ase", "ache", "available", "stock", "pawa", "paowa", "achee", "ase?", "ache?", "stock e ache"];
-const PRICE_WORDS = ["price", "dam", "koto", "rate"];
 
 const TEAMS = [
   "Argentina", "Brazil", "Portugal", "Spain", "France", "Germany", "England",
@@ -71,6 +68,12 @@ function detectSource(n: string): SourceCountry | undefined {
   return undefined;
 }
 
+function availableSizes(p: Product): string {
+  const inStock = p.variants.filter((v) => v.stock_quantity > 0);
+  if (!inStock.length) return p.variants.map((v) => v.size).join(", ");
+  return inStock.map((v) => v.size).join(", ");
+}
+
 export function matchQuery(query: string, products: Product[]): QueryReasoning {
   const normalized = normalize(query);
   const detected_team = detectFromList(normalized, TEAMS);
@@ -94,9 +97,8 @@ export function matchQuery(query: string, products: Product[]): QueryReasoning {
     if (detected_kit && p.kit_type === detected_kit) score += 10;
     if (detected_source && p.source_country === detected_source) score += 5;
 
-    // soft name keyword match (only counts if team/player not detected, to avoid leaking unrelated)
-    const nameLower = p.product_name.toLowerCase();
     if (!detected_team && !detected_player) {
+      const nameLower = p.product_name.toLowerCase();
       const tokens = normalized.split(" ").filter((t) => t.length > 3);
       const hits = tokens.filter((t) => nameLower.includes(t)).length;
       if (hits >= 2) score += 20;
@@ -112,41 +114,96 @@ export function matchQuery(query: string, products: Product[]): QueryReasoning {
     .slice(0, 3)
     .map((s) => ({ product_id: s.p.id, name: s.p.product_name, score: s.score }));
 
-  // Critical: if user specified a team that is NOT in inventory, do not match by player coincidence
+  // Compute team-level fallback (team or player exists in inventory)
+  const sameTeamProducts = detected_team
+    ? products.filter((p) => p.team_country_club.toLowerCase() === detected_team.toLowerCase())
+    : detected_player
+    ? products.filter((p) => p.player_name?.toLowerCase().includes(detected_player.toLowerCase()))
+    : [];
+
+  let closest_fallback: FallbackMatch | undefined;
+  if (sameTeamProducts.length) {
+    // Prefer one with stock
+    const withStock = sameTeamProducts.find((p) =>
+      p.variants.some((v) => v.stock_quantity > 0),
+    );
+    const pick = withStock || sameTeamProducts[0];
+    closest_fallback = {
+      product_id: pick.id,
+      product_name: pick.product_name,
+      reason: `Closest available product for ${detected_team || detected_player}.`,
+    };
+  }
+
+  const base = {
+    original: query,
+    normalized,
+    detected_team,
+    detected_player,
+    detected_year,
+    detected_size,
+    detected_edition,
+    detected_source,
+    detected_kit,
+    closest_fallback,
+  };
+
+  // Case 1: Team explicitly named, NOT in inventory at all
   if (detected_team) {
     const teamExists = products.some(
       (p) => p.team_country_club.toLowerCase() === detected_team.toLowerCase(),
     );
     if (!teamExists) {
       return {
-        original: query,
-        normalized,
-        detected_team,
-        detected_player,
-        detected_year,
-        detected_size,
-        detected_edition,
-        detected_source,
-        detected_kit,
+        ...base,
         confidence: 0,
-        reason: `Customer asked about "${detected_team}" but no product with that team/country/club exists in inventory. Refusing to substitute another product.`,
+        reason: `Customer asked about "${detected_team}" but no product with that team/country/club exists in inventory.`,
         reply: `Sorry, ${detected_team} er jersey ta currently inventory te nei. Apni onno club/country, player, season ba size bolle ami abar check korte parbo.`,
         candidates: [],
       };
     }
+
+    // Case 2: Team exists, but with a kit_type filter that doesn't match any product
+    if (detected_kit) {
+      const exact = products.find(
+        (p) =>
+          p.team_country_club.toLowerCase() === detected_team.toLowerCase() &&
+          p.kit_type === detected_kit,
+      );
+      if (!exact) {
+        const fb = closest_fallback;
+        const fbProduct = sameTeamProducts.find((p) => p.id === fb?.product_id) || sameTeamProducts[0];
+        const sizes = fbProduct ? availableSizes(fbProduct) : "";
+        return {
+          ...base,
+          confidence: 35,
+          reason: `Team "${detected_team}" exists but requested kit type "${detected_kit}" is not in inventory. Suggesting closest available product.`,
+          reply: fbProduct
+            ? `${detected_team} er ${detected_kit} Kit currently inventory te nei. But ${fbProduct.product_name} available ache in ${sizes}. Apni eta dekhte chan?`
+            : `${detected_team} er ${detected_kit} Kit currently inventory te nei.`,
+          candidates,
+        };
+      }
+    }
   }
 
   if (!top || top.score < 45) {
+    // If a team/player fallback exists, surface it
+    if (closest_fallback && sameTeamProducts.length) {
+      const fbProduct = sameTeamProducts[0];
+      const sizes = availableSizes(fbProduct);
+      return {
+        ...base,
+        confidence: top?.score ?? 0,
+        matched_product_id: undefined,
+        matched_product_name: undefined,
+        reason: "Exact match not found. Closest inventory product found based on team/player.",
+        reply: `Exact match paini, but ${fbProduct.product_name} available ache in ${sizes}. Apni eta dekhte chan?`,
+        candidates,
+      };
+    }
     return {
-      original: query,
-      normalized,
-      detected_team,
-      detected_player,
-      detected_year,
-      detected_size,
-      detected_edition,
-      detected_source,
-      detected_kit,
+      ...base,
       confidence: top?.score ?? 0,
       reason: "No confident match found in inventory.",
       reply:
@@ -156,19 +213,9 @@ export function matchQuery(query: string, products: Product[]): QueryReasoning {
   }
 
   if (top.score < 70 && candidates.length > 1) {
-    const list = candidates
-      .map((c, i) => `${i + 1}. ${c.name}`)
-      .join("\n");
+    const list = candidates.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
     return {
-      original: query,
-      normalized,
-      detected_team,
-      detected_player,
-      detected_year,
-      detected_size,
-      detected_edition,
-      detected_source,
-      detected_kit,
+      ...base,
       confidence: top.score,
       matched_product_id: top.p.id,
       matched_product_name: top.p.product_name,
@@ -181,16 +228,16 @@ export function matchQuery(query: string, products: Product[]): QueryReasoning {
   // High confidence
   const p = top.p;
   let reply = "";
-  let reason = `High-confidence match (${top.score}). Used inventory record for ${p.product_name}.`;
+  const reason = `High-confidence match (${top.score}). Used inventory record for ${p.product_name}.`;
 
   if (detected_size) {
     const v = p.variants.find((x) => x.size === detected_size);
     if (!v) {
-      reply = `${p.product_name} available ache. Available sizes: ${p.variants.map((x) => x.size).join(", ")}. Apni je size cheyechen (${detected_size}) seita nei.`;
+      reply = `${p.product_name} available ache. Available sizes: ${availableSizes(p)}. Apni je size cheyechen (${detected_size}) seita nei.`;
     } else if (v.stock_quantity === 0) {
       reply = `Sorry, ${p.product_name} size ${v.size} ekhon stock e nei. Possible restock date: ${v.possible_restock_date || "TBA"}. Chaile preorder korte paren.`;
     } else if (v.stock_quantity <= v.low_stock_threshold) {
-      reply = `Available ache, but only ${v.stock_quantity} pcs left. Price ${bdt(v.selling_price)}. Chaile ekhon reserve korte paren.`;
+      reply = `Yes, ${p.product_name} size ${v.size} available ache, but low stock. Price ${bdt(v.selling_price)}. Stock e ${v.stock_quantity} pcs ache. Chaile reserve korte paren.`;
     } else {
       reply = `Yes, ${p.product_name} size ${v.size} available ache. Price ${bdt(v.selling_price)}. Stock e ${v.stock_quantity} pcs ache. Order korte chaile bolben.`;
     }
@@ -200,15 +247,7 @@ export function matchQuery(query: string, products: Product[]): QueryReasoning {
   }
 
   return {
-    original: query,
-    normalized,
-    detected_team,
-    detected_player,
-    detected_year,
-    detected_size,
-    detected_edition,
-    detected_source,
-    detected_kit,
+    ...base,
     matched_product_id: p.id,
     matched_product_name: p.product_name,
     confidence: top.score,
