@@ -132,6 +132,7 @@ function InventoryPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-14"></TableHead>
                 <TableHead>Product</TableHead>
                 <TableHead>Team</TableHead>
                 <TableHead>Player</TableHead>
@@ -155,6 +156,16 @@ function InventoryPage() {
             <TableBody>
               {rows.map(({ p, v }) => (
                 <TableRow key={`${p.id}-${v.id}`}>
+                  <TableCell>
+                    <div className="h-10 w-10 rounded-md overflow-hidden bg-muted border border-border flex items-center justify-center">
+                      {p.product_image_url ? (
+                        <img src={p.product_image_url} alt="" className="h-full w-full object-cover"
+                          onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">👕</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium max-w-[220px] truncate">{p.product_name}</TableCell>
                   <TableCell>{p.team_country_club}</TableCell>
                   <TableCell>{p.player_name || "—"}</TableCell>
@@ -190,7 +201,7 @@ function InventoryPage() {
               ))}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={18} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={19} className="text-center py-12 text-muted-foreground">
                     No items match these filters.
                   </TableCell>
                 </TableRow>

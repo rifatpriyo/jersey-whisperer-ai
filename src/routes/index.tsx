@@ -33,7 +33,7 @@ function Stat({
   icon: Icon, label, value, hint, accent,
 }: { icon: any; label: string; value: string; hint?: string; accent?: string }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden card-hover">
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>

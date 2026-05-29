@@ -47,11 +47,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   ),
 });
 
+const themeBootScript = `(function(){try{var t=localStorage.getItem('jerseybecho_theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`;
+
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head><HeadContent /></head>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {children}
         <Scripts />
       </body>

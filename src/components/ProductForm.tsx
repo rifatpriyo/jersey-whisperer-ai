@@ -12,9 +12,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ImageIcon, Upload } from "lucide-react";
 
 const SIZES: Size[] = ["S", "M", "L", "XL", "XXL"];
+
+function FieldHint({ children }: { children: React.ReactNode }) {
+  return <p className="text-[11px] text-muted-foreground mt-0.5">{children}</p>;
+}
+
+function SectionTitle({ title, desc }: { title: string; desc?: string }) {
+  return (
+    <div className="mb-3">
+      <h3 className="font-semibold text-foreground text-sm uppercase tracking-wide">{title}</h3>
+      {desc && <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>}
+    </div>
+  );
+}
 
 interface Props {
   initial?: Product;
@@ -143,6 +156,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
             onChange={(e) => update("font_name", e.target.value)}
             placeholder="Messi10 / Neymar10 / No print"
           />
+          <FieldHint>Player print on the back, e.g. Messi10, Cristiano7, or "No print".</FieldHint>
         </div>
         <div className="space-y-1.5">
           <Label>Has print?</Label>
@@ -215,6 +229,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
               ))}
             </SelectContent>
           </Select>
+          <FieldHint>BD-made auto-locks to Bangladesh. Imported allows China or Thailand.</FieldHint>
         </div>
         <div className="space-y-1.5">
           <Label>Supplier name</Label>
@@ -233,6 +248,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
               ))}
             </SelectContent>
           </Select>
+          <FieldHint>Used by Demand Spike Score to forecast restock urgency.</FieldHint>
         </div>
         <div className="md:col-span-2 space-y-1.5">
           <Label>Trend reason</Label>
@@ -272,7 +288,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
                   onChange={(e) => updateVariant(v.id, { stock_quantity: parseInt(e.target.value) || 0 })} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Low threshold</Label>
+                <Label className="text-xs" title="Low stock threshold means when the system should alert you.">Low threshold</Label>
                 <Input type="number" value={v.low_stock_threshold}
                   onChange={(e) => updateVariant(v.id, { low_stock_threshold: parseInt(e.target.value) || 0 })} />
               </div>
@@ -307,8 +323,58 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
         </div>
       </div>
 
+      <div>
+        <SectionTitle title="Optional Image" desc="Add a jersey photo via URL or upload. Leave blank to use a placeholder." />
+        <div className="grid md:grid-cols-[160px_1fr] gap-4 items-start">
+          <div className="h-40 w-40 rounded-lg border border-border bg-muted/30 flex items-center justify-center overflow-hidden">
+            {form.product_image_url ? (
+              <img
+                src={form.product_image_url}
+                alt="Jersey preview"
+                className="h-full w-full object-cover"
+                onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+              />
+            ) : (
+              <div className="flex flex-col items-center text-muted-foreground text-xs">
+                <ImageIcon className="h-8 w-8 mb-1" />
+                No image
+              </div>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Image URL (optional)</Label>
+              <Input
+                value={form.product_image_url || ""}
+                onChange={(e) => update("product_image_url", e.target.value)}
+                placeholder="https://… or leave empty"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1"><Upload className="h-3 w-3" /> Or upload from device</Label>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 2 * 1024 * 1024) {
+                    alert("Image must be under 2MB");
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => update("product_image_url", String(reader.result || ""));
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <FieldHint>Max 2MB. Stored locally with the product (demo).</FieldHint>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex gap-2 justify-end">
-        <Button type="submit" size="lg">{submitLabel}</Button>
+        <Button type="submit" size="lg" className="hover:scale-[1.02] transition-transform">{submitLabel}</Button>
       </div>
     </form>
   );
