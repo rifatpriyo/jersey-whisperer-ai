@@ -16,14 +16,16 @@ export const Route = createFileRoute("/query-sim")({
 });
 
 const TESTS = [
+  "jercy aca imported?",
+  "brazil kit ase away player edition?",
+  "barca fan edition available ei season er ta?",
+  "whats the highest size you guys sell?",
+  "5xl ki ane dewa possible pre order korle?",
+  "miau",
+  "arg home r terrace kit hobe player version?",
+  "size chart ta diben?",
+  "pickup location ache?",
   "Argentina Messi XL ase?",
-  "vai argentina away hobe?",
-  "Brazil Neymar retro L ache?",
-  "Spain away 2026 WC kit ase?",
-  "Portugal Ronaldo L available?",
-  "Bangladesh national team jersey L size ache?",
-  "Real Madrid Bellingham M size available?",
-  "Argentina 2006 retro M ache?",
 ];
 
 interface Turn {

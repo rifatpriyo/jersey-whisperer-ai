@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Product } from "./types";
 import { seedProducts } from "./seed-data";
 
-const STORAGE_KEY = "jerseybecho_products_v3";
+const STORAGE_KEY = "jerseybecho_products_v4";
 
 interface Ctx {
   products: Product[];
