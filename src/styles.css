@@ -118,9 +118,20 @@
 
 @layer base {
   * { border-color: var(--color-border); }
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
   }
+  button, a { transition: color .15s ease, background-color .15s ease, border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+}
+
+@layer components {
+  .card-hover { transition: transform .2s ease, box-shadow .2s ease; }
+  .card-hover:hover { transform: translateY(-2px); box-shadow: var(--shadow-elevated); }
+  table tbody tr { transition: background-color .15s ease; }
+  table tbody tr:hover { background-color: color-mix(in oklab, var(--color-muted) 60%, transparent); }
 }
