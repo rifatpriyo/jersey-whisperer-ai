@@ -12,9 +12,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ImageIcon, Upload } from "lucide-react";
 
 const SIZES: Size[] = ["S", "M", "L", "XL", "XXL"];
+
+function FieldHint({ children }: { children: React.ReactNode }) {
+  return <p className="text-[11px] text-muted-foreground mt-0.5">{children}</p>;
+}
+
+function SectionTitle({ title, desc }: { title: string; desc?: string }) {
+  return (
+    <div className="mb-3">
+      <h3 className="font-semibold text-foreground text-sm uppercase tracking-wide">{title}</h3>
+      {desc && <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>}
+    </div>
+  );
+}
 
 interface Props {
   initial?: Product;
