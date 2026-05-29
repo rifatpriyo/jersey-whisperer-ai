@@ -44,6 +44,9 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
       product_name: "",
       team_country_club: "",
       player_name: "",
+      font_name: "",
+      has_print: true,
+      patch_available: false,
       season_year: 2026,
       kit_type: "Home",
       edition_type: "Player Edition",
@@ -132,6 +135,34 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
             onChange={(e) => update("player_name", e.target.value)}
             placeholder="Messi"
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Font / Print name</Label>
+          <Input
+            value={form.font_name || ""}
+            onChange={(e) => update("font_name", e.target.value)}
+            placeholder="Messi10 / Neymar10 / No print"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Has print?</Label>
+          <Select value={form.has_print ? "yes" : "no"} onValueChange={(v) => update("has_print", v === "yes")}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="yes">Yes</SelectItem>
+              <SelectItem value="no">No / Blank</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Patch available?</Label>
+          <Select value={form.patch_available ? "yes" : "no"} onValueChange={(v) => update("patch_available", v === "yes")}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="yes">Yes</SelectItem>
+              <SelectItem value="no">No</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label>Season / Year</Label>
