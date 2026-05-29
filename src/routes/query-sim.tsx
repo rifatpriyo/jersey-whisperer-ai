@@ -141,25 +141,19 @@ function QueryPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                  <Row k="Detected intent" v={t.result.intent} />
+                  <Row k="Response source" v={t.result.response_source} />
                   <Row k="Original query" v={t.result.original} />
                   <Row k="Normalized" v={t.result.normalized} />
                   <Row k="Detected team" v={t.result.detected_team} />
                   <Row k="Detected player" v={t.result.detected_player} />
+                  <Row k="Detected font/print" v={t.result.detected_font} />
                   <Row k="Detected kit" v={t.result.detected_kit} />
+                  <Row k="Detected edition" v={t.result.detected_edition} />
                   <Row k="Detected year" v={t.result.detected_year} />
                   <Row k="Detected size" v={t.result.detected_size} />
-                  <Row k="Best exact match" v={t.result.matched_product_name} />
+                  <Row k="Best inventory match" v={t.result.matched_product_name} />
                   <Row k="Closest fallback" v={t.result.closest_fallback?.product_name} />
-                  <Row
-                    k="Inventory source"
-                    v={
-                      t.result.matched_product_id
-                        ? "Real inventory record"
-                        : t.result.closest_fallback
-                        ? "Fallback inventory record"
-                        : "—"
-                    }
-                  />
                 </div>
 
                 <div className="mt-3 p-2 rounded-md bg-background border border-border text-xs">
