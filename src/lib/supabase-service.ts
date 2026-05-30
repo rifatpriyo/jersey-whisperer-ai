@@ -1,7 +1,7 @@
 import type { ForecastResult } from "./forecast";
 import { forecastProduct } from "./forecast";
 import { seedProducts } from "./seed-data";
-import { supabase } from "./supabase";
+import { getSupabaseClient } from "./supabase";
 import { localTrendSignals, type LocalTrendSignal } from "./trend-signals";
 import type { Product, Variant } from "./types";
 
@@ -32,6 +32,34 @@ type ProductRow = {
   sales_7d: number | null;
   created_at: string | null;
 };
+
+const SUPABASE_TIMEOUT_MS = 1800;
+
+async function withSupabaseTimeout<T>(
+  label: string,
+  operation: () => Promise<T>,
+  fallback: T,
+  timeoutMs = SUPABASE_TIMEOUT_MS,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } catch (error) {
+    console.warn(`[Supabase] ${label} skipped`, error);
+    return fallback;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 function safeNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -245,52 +273,53 @@ function detectLanguage(text: string) {
 }
 
 export async function fetchProductsFromSupabase() {
-  if (!supabase) return [];
-  try {
+  return withSupabaseTimeout("fetch products", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return [];
     const { data, error } = await supabase
       .from("products")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error || !data) return [];
+    if (error) throw error;
+    if (!data) return [];
     return (data as ProductRow[]).map((row) => parseProductRow(row));
-  } catch {
-    return [];
-  }
+  }, []);
 }
 
 export async function upsertProductToSupabase(product: Product) {
-  if (!supabase) return false;
-  try {
+  return withSupabaseTimeout("upsert product", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return false;
     const row = summarizeProductForStorage(product);
     const { error } = await supabase.from("products").upsert(row, { onConflict: "id" });
-    if (error) return false;
-    await createProductEmbeddingRecord(product);
+    if (error) throw error;
+    void createProductEmbeddingRecord(product);
     return true;
-  } catch {
-    return false;
-  }
+  }, false);
 }
 
 export async function deleteProductFromSupabase(productId: string) {
-  if (!supabase) return false;
-  try {
+  return withSupabaseTimeout("delete product", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return false;
     const { error } = await supabase.from("products").delete().eq("id", productId);
-    return !error;
-  } catch {
-    return false;
-  }
+    if (error) throw error;
+    return true;
+  }, false);
 }
 
 export async function fetchTrendSignalsFromSupabase(): Promise<StoredTrendSignal[]> {
-  if (!supabase) return [];
-  try {
+  return withSupabaseTimeout("fetch trend signals", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return [];
     const { data, error } = await supabase
       .from("trend_signals")
       .select("*")
       .order("fetched_at", { ascending: false });
 
-    if (error || !data) return [];
+    if (error) throw error;
+    if (!data) return [];
 
     return data.map((row) => ({
       id: row.id as string,
@@ -306,14 +335,13 @@ export async function fetchTrendSignalsFromSupabase(): Promise<StoredTrendSignal
       source: (row.source as string) || undefined,
       fetched_at: (row.fetched_at as string) || undefined,
     }));
-  } catch {
-    return [];
-  }
+  }, []);
 }
 
 export async function seedTrendSignalsToSupabase(signals: LocalTrendSignal[]) {
-  if (!supabase) return [];
-  try {
+  return withSupabaseTimeout("seed trend signals", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return [];
     const existing = await fetchTrendSignalsFromSupabase();
     const existingKeys = new Set(existing.map((signal) => `${signal.keyword}::${signal.channel}`));
     const missing = signals.filter(
@@ -339,31 +367,35 @@ export async function seedTrendSignalsToSupabase(signals: LocalTrendSignal[]) {
       )
       .select("*");
 
-    if (!error && data) {
-      await Promise.allSettled(
-        data.map((row) =>
+    if (error) throw error;
+    if (data) {
+      const seeded = data.map((row) => ({
+        id: row.id as string,
+        keyword: row.keyword as string,
+        geo: ((row.geo as string) || "BD") as "BD",
+        channel: ((row.channel as string) || "web") as LocalTrendSignal["channel"],
+        language: ((row.language as string) || "en") as LocalTrendSignal["language"],
+        momentum: ((row.momentum as string) || "stable") as LocalTrendSignal["momentum"],
+        growthWeight: safeNumber(row.growth_weight, 0),
+        matchedTeam: (row.matched_team as string) || undefined,
+        matchedPlayer: (row.matched_player as string) || undefined,
+        explanation: (row.explanation as string) || "",
+        source: (row.source as string) || undefined,
+        fetched_at: (row.fetched_at as string) || undefined,
+      }));
+
+      void Promise.allSettled(
+        seeded.map((signal) =>
           createTrendEmbeddingRecord({
-            id: row.id as string,
-            keyword: row.keyword as string,
-            geo: ((row.geo as string) || "BD") as "BD",
-            channel: ((row.channel as string) || "web") as LocalTrendSignal["channel"],
-            language: ((row.language as string) || "en") as LocalTrendSignal["language"],
-            momentum: ((row.momentum as string) || "stable") as LocalTrendSignal["momentum"],
-            growthWeight: safeNumber(row.growth_weight, 0),
-            matchedTeam: (row.matched_team as string) || undefined,
-            matchedPlayer: (row.matched_player as string) || undefined,
-            explanation: (row.explanation as string) || "",
-            source: (row.source as string) || undefined,
-            fetched_at: (row.fetched_at as string) || undefined,
+            ...signal,
           }),
         ),
       );
+      return [...seeded, ...existing];
     }
 
-    return fetchTrendSignalsFromSupabase();
-  } catch {
-    return [];
-  }
+    return existing;
+  }, []);
 }
 
 export async function saveForecastScoreToSupabase(
@@ -373,8 +405,9 @@ export async function saveForecastScoreToSupabase(
     "demandSpikeScore" | "urgencyLabel" | "recommendation" | "breakdown"
   >,
 ) {
-  if (!supabase) return false;
-  try {
+  return withSupabaseTimeout("save forecast score", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return false;
     const { error } = await supabase.from("forecast_scores").insert({
       product_id: productId,
       demand_spike_score: scoreObject.demandSpikeScore,
@@ -386,10 +419,9 @@ export async function saveForecastScoreToSupabase(
       sales_velocity_score: scoreObject.breakdown.sportsNews,
       recommendation: scoreObject.recommendation,
     });
-    return !error;
-  } catch {
-    return false;
-  }
+    if (error) throw error;
+    return true;
+  }, false);
 }
 
 export async function saveChatLogToSupabase(
@@ -397,23 +429,24 @@ export async function saveChatLogToSupabase(
   aiReply: string,
   matchedProductId?: string,
 ) {
-  if (!supabase) return false;
-  try {
+  return withSupabaseTimeout("save chat log", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return false;
     const { error } = await supabase.from("chat_logs").insert({
       customer_message: customerMessage,
       ai_reply: aiReply,
       matched_product_id: matchedProductId ?? null,
       language: detectLanguage(customerMessage),
     });
-    return !error;
-  } catch {
-    return false;
-  }
+    if (error) throw error;
+    return true;
+  }, false);
 }
 
 export async function createProductEmbeddingRecord(product: Product) {
-  if (!supabase) return false;
-  try {
+  return withSupabaseTimeout("create product embedding", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return false;
     const content = buildProductEmbeddingContent(product);
     const metadata = {
       product_name: product.product_name,
@@ -431,25 +464,26 @@ export async function createProductEmbeddingRecord(product: Product) {
       metadata,
       embedding,
     });
-    return !error;
-  } catch {
-    return false;
-  }
+    if (error) throw error;
+    return true;
+  }, false);
 }
 
 export async function createTrendEmbeddingRecord(trendSignal: StoredTrendSignal) {
-  if (!supabase) return false;
-  try {
+  return withSupabaseTimeout("create trend embedding", async () => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return false;
     let trendSignalId = trendSignal.id;
 
     if (!trendSignalId) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("trend_signals")
         .select("id")
         .eq("keyword", trendSignal.keyword)
         .eq("channel", trendSignal.channel)
         .limit(1)
         .maybeSingle();
+      if (error) throw error;
       trendSignalId = (data?.id as string | undefined) ?? undefined;
     }
 
@@ -472,10 +506,9 @@ export async function createTrendEmbeddingRecord(trendSignal: StoredTrendSignal)
       metadata,
       embedding,
     });
-    return !error;
-  } catch {
-    return false;
-  }
+    if (error) throw error;
+    return true;
+  }, false);
 }
 
 export function semanticProductSearchLocalFallback(query: string): SemanticSearchHit[] {

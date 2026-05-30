@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { seedProducts } from "./seed-data";
 import {
   deleteProductFromSupabase,
@@ -9,6 +9,7 @@ import { isSupabaseConfigured } from "./supabase";
 import type { Product } from "./types";
 
 export const STORAGE_KEY = "jerseybecho_products_v4";
+const INITIAL_SUPABASE_SYNC_KEY = "jerseybecho_initial_supabase_sync_v1";
 
 interface Ctx {
   products: Product[];
@@ -43,9 +44,11 @@ function persistLocalProducts(products: Product[]) {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProductsState] = useState<Product[]>(seedProducts);
+  const hasQueuedInitialSyncRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    let syncTimer: ReturnType<typeof setTimeout> | undefined;
     let localProducts = seedProducts;
 
     try {
@@ -71,13 +74,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await Promise.allSettled(localProducts.map((product) => upsertProductToSupabase(product)));
+      if (hasQueuedInitialSyncRef.current) return;
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(INITIAL_SUPABASE_SYNC_KEY)) {
+        return;
+      }
+
+      hasQueuedInitialSyncRef.current = true;
+      try {
+        sessionStorage.setItem(INITIAL_SUPABASE_SYNC_KEY, "1");
+      } catch {
+        // Session storage is optional; this guard is only for performance.
+      }
+
+      syncTimer = setTimeout(() => {
+        void Promise.allSettled(localProducts.map((product) => upsertProductToSupabase(product)));
+      }, 750);
     };
 
     void load();
 
     return () => {
       cancelled = true;
+      if (syncTimer) clearTimeout(syncTimer);
     };
   }, []);
 

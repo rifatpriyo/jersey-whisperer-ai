@@ -47,6 +47,9 @@ export const Route = createFileRoute("/forecast")({
   component: ForecastPage,
 });
 
+const TREND_SEED_SESSION_KEY = "jerseybecho_trend_seeded_v1";
+const FORECAST_SAVE_SESSION_KEY = "jerseybecho_forecast_scores_saved_v1";
+
 function toPercent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
@@ -83,6 +86,7 @@ function ForecastPage() {
   const [trendSignals, setTrendSignals] = useState<StoredTrendSignal[]>(localTrendSignals);
   const [searchQuery, setSearchQuery] = useState("Argentina 2XL player edition");
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const [technicalDetailsOpen, setTechnicalDetailsOpen] = useState("");
   const trendSeedAttemptedRef = useRef(false);
   const savedForecastKeyRef = useRef("");
 
@@ -100,13 +104,19 @@ function ForecastPage() {
   const topRecommendations = useMemo(() => forecasts.slice(0, 10), [forecasts]);
 
   const productMatches = useMemo(
-    () => semanticProductSearchLocalFallback(searchQuery),
-    [searchQuery],
+    () =>
+      technicalDetailsOpen === "technical-details"
+        ? semanticProductSearchLocalFallback(searchQuery)
+        : [],
+    [searchQuery, technicalDetailsOpen],
   );
 
   const trendMatches = useMemo(
-    () => semanticTrendSearchLocalFallback(searchQuery),
-    [searchQuery],
+    () =>
+      technicalDetailsOpen === "technical-details"
+        ? semanticTrendSearchLocalFallback(searchQuery)
+        : [],
+    [searchQuery, technicalDetailsOpen],
   );
 
   useEffect(() => {
@@ -122,8 +132,17 @@ function ForecastPage() {
         const remote = await fetchTrendSignalsFromSupabase();
         if (cancelled) return;
 
-        if (remote.length === 0 && !trendSeedAttemptedRef.current) {
+        const alreadySeeded =
+          typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem(TREND_SEED_SESSION_KEY);
+
+        if (remote.length === 0 && !trendSeedAttemptedRef.current && !alreadySeeded) {
           trendSeedAttemptedRef.current = true;
+          try {
+            sessionStorage.setItem(TREND_SEED_SESSION_KEY, "1");
+          } catch {
+            // Session storage is only used to avoid repeated demo seeding.
+          }
           const seeded = await seedTrendSignalsToSupabase(localTrendSignals);
           if (!cancelled && seeded.length > 0) {
             setTrendSignals(seeded);
@@ -150,11 +169,30 @@ function ForecastPage() {
       .map((forecast) => `${forecast.product_id}:${forecast.demandSpikeScore}`)
       .join("|");
     if (savedForecastKeyRef.current === forecastKey) return;
+    if (
+      typeof sessionStorage !== "undefined" &&
+      sessionStorage.getItem(FORECAST_SAVE_SESSION_KEY) === forecastKey
+    ) {
+      savedForecastKeyRef.current = forecastKey;
+      return;
+    }
     savedForecastKeyRef.current = forecastKey;
 
-    void Promise.allSettled(
-      forecasts.map((forecast) => saveForecastScoreToSupabase(forecast.product_id, forecast)),
-    );
+    try {
+      sessionStorage.setItem(FORECAST_SAVE_SESSION_KEY, forecastKey);
+    } catch {
+      // Session storage is optional; forecast saving is background-only.
+    }
+
+    const saveTimer = setTimeout(() => {
+      void Promise.allSettled(
+        forecasts.slice(0, 10).map((forecast) =>
+          saveForecastScoreToSupabase(forecast.product_id, forecast),
+        ),
+      );
+    }, 750);
+
+    return () => clearTimeout(saveTimer);
   }, [forecasts]);
 
   const missedInsights = useMemo(() => {
@@ -245,7 +283,7 @@ function ForecastPage() {
                         </div>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {forecast.team} · {forecast.typeLabel}
+                        {forecast.team} - {forecast.typeLabel}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Badge variant="outline" className={forecast.urgencyColor}>
@@ -261,7 +299,7 @@ function ForecastPage() {
                         </div>
                         <ul className="mt-2 space-y-1 text-sm text-foreground/90">
                           {buildSellerReasons(forecast).map((reason) => (
-                            <li key={reason}>• {reason}</li>
+                            <li key={reason}>- {reason}</li>
                           ))}
                         </ul>
                       </div>
@@ -433,7 +471,12 @@ function ForecastPage() {
 
       <Card className="mt-4">
         <CardContent className="p-5">
-          <Accordion type="single" collapsible>
+          <Accordion
+            type="single"
+            collapsible
+            value={technicalDetailsOpen}
+            onValueChange={setTechnicalDetailsOpen}
+          >
             <AccordionItem value="technical-details" className="border-b-0">
               <AccordionTrigger>Technical implementation details</AccordionTrigger>
               <AccordionContent>
