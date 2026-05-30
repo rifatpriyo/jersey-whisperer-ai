@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [
     tanstackRouter({
       target: "react",
-      autoCodeSplitting: true,
+      autoCodeSplitting: false,
     }),
     react(),
     tailwindcss(),
@@ -25,36 +25,5 @@ export default defineConfig({
     outDir: "dist/client",
     emptyOutDir: true,
     sourcemap: false,
-    modulePreload: {
-      resolveDependencies(_filename, deps) {
-        return deps.filter((dep) => !dep.includes("supabase-vendor"));
-      },
-    },
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
-          if (
-            /node_modules[\\/](react|react-dom|scheduler|use-sync-external-store)[\\/]/.test(id) ||
-            id.includes("@tanstack/react-router") ||
-            id.includes("@tanstack/react-query")
-          ) {
-            return "react-vendor";
-          }
-          if (id.includes("@supabase")) return "supabase-vendor";
-          if (
-            id.includes("lucide-react") ||
-            id.includes("@radix-ui") ||
-            id.includes("cmdk") ||
-            id.includes("vaul") ||
-            id.includes("class-variance-authority") ||
-            id.includes("tailwind-merge")
-          ) {
-            return "ui-vendor";
-          }
-          return undefined;
-        },
-      },
-    },
   },
 });

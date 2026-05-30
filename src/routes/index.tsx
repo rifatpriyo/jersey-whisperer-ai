@@ -256,9 +256,9 @@ function DashboardPage() {
               />
             </div>
             <div className="mt-4">
-              <Link to="/forecast">
-                <Button>Open Forecast</Button>
-              </Link>
+              <Button asChild>
+                <Link to="/forecast">Open Forecast</Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

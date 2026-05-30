@@ -98,9 +98,9 @@ function InventoryPage() {
             >
               <RotateCcw className="mr-1 h-4 w-4" /> Reset demo
             </Button>
-            <Link to="/add-product">
-              <Button size="sm">+ Add product</Button>
-            </Link>
+            <Button asChild size="sm">
+              <Link to="/add-product">+ Add product</Link>
+            </Button>
           </>
         }
       />
