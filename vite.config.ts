@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -7,7 +8,14 @@ import { defineConfig } from "vite";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: true,
+    }),
+    react(),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(projectRoot, "./src"),
@@ -16,6 +24,12 @@ export default defineConfig({
   build: {
     outDir: "dist/client",
     emptyOutDir: true,
+    sourcemap: false,
+    modulePreload: {
+      resolveDependencies(_filename, deps) {
+        return deps.filter((dep) => !dep.includes("supabase-vendor"));
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -25,18 +39,18 @@ export default defineConfig({
             id.includes("@tanstack/react-router") ||
             id.includes("@tanstack/react-query")
           ) {
-            return "vendor-react";
+            return "react-vendor";
           }
-          if (id.includes("@supabase")) return "vendor-supabase";
-          if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("@supabase")) return "supabase-vendor";
           if (
+            id.includes("lucide-react") ||
             id.includes("@radix-ui") ||
             id.includes("cmdk") ||
             id.includes("vaul") ||
             id.includes("class-variance-authority") ||
             id.includes("tailwind-merge")
           ) {
-            return "vendor-ui";
+            return "ui-vendor";
           }
           return undefined;
         },
