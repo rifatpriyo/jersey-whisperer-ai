@@ -1,14 +1,20 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Product } from "./types";
 import { seedProducts } from "./seed-data";
+import {
+  deleteProductFromSupabase,
+  fetchProductsFromSupabase,
+  upsertProductToSupabase,
+} from "./supabase-service";
+import { isSupabaseConfigured } from "./supabase";
+import type { Product } from "./types";
 
-const STORAGE_KEY = "jerseybecho_products_v4";
+export const STORAGE_KEY = "jerseybecho_products_v4";
 
 interface Ctx {
   products: Product[];
-  setProducts: (p: Product[]) => void;
-  addProduct: (p: Product) => void;
-  updateProduct: (p: Product) => void;
+  setProducts: (products: Product[]) => void;
+  addProduct: (product: Product) => void;
+  updateProduct: (product: Product) => void;
   deleteProduct: (id: string) => void;
   incrementQueryCount: (id: string) => void;
   resetDemo: () => void;
@@ -16,33 +22,103 @@ interface Ctx {
 
 const StoreContext = createContext<Ctx | null>(null);
 
-function sanitize(list: any): Product[] {
+function sanitize(list: unknown): Product[] {
   if (!Array.isArray(list)) return seedProducts;
-  return list.map((p) => ({
-    ...p,
-    trend_signal: p?.trend_signal ?? "None",
-    trend_reason: p?.trend_reason ?? "",
-    query_count: Number.isFinite(p?.query_count) ? p.query_count : 0,
-    variants: Array.isArray(p?.variants) ? p.variants : [],
+  return list.map((product) => ({
+    ...product,
+    trend_signal: product?.trend_signal ?? "None",
+    trend_reason: product?.trend_reason ?? "",
+    query_count: Number.isFinite(product?.query_count) ? product.query_count : 0,
+    variants: Array.isArray(product?.variants) ? product.variants : [],
   })) as Product[];
+}
+
+function persistLocalProducts(products: Product[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+  } catch {
+    // Local demo storage should never break the UI.
+  }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProductsState] = useState<Product[]>(seedProducts);
 
   useEffect(() => {
+    let cancelled = false;
+    let localProducts = seedProducts;
+
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setProductsState(sanitize(JSON.parse(raw)));
-    } catch {}
+      if (raw) {
+        localProducts = sanitize(JSON.parse(raw));
+        setProductsState(localProducts);
+      }
+    } catch {
+      localProducts = seedProducts;
+    }
+
+    const load = async () => {
+      if (!isSupabaseConfigured) return;
+
+      const remoteProducts = await fetchProductsFromSupabase();
+      if (cancelled) return;
+
+      if (remoteProducts.length > 0) {
+        const clean = sanitize(remoteProducts);
+        setProductsState(clean);
+        persistLocalProducts(clean);
+        return;
+      }
+
+      await Promise.allSettled(localProducts.map((product) => upsertProductToSupabase(product)));
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const setProducts = (p: Product[]) => {
-    const clean = sanitize(p);
+  const setProducts = (nextProducts: Product[]) => {
+    const clean = sanitize(nextProducts);
     setProductsState(clean);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
-    } catch {}
+    persistLocalProducts(clean);
+  };
+
+  const addProduct = (product: Product) => {
+    const nextProducts = [product, ...products];
+    setProducts(nextProducts);
+    void upsertProductToSupabase(product);
+  };
+
+  const updateProduct = (product: Product) => {
+    const nextProducts = products.map((entry) => (entry.id === product.id ? product : entry));
+    setProducts(nextProducts);
+    void upsertProductToSupabase(product);
+  };
+
+  const deleteProduct = (id: string) => {
+    const nextProducts = products.filter((entry) => entry.id !== id);
+    setProducts(nextProducts);
+    void deleteProductFromSupabase(id);
+  };
+
+  const incrementQueryCount = (id: string) => {
+    const nextProducts = products.map((entry) =>
+      entry.id === id ? { ...entry, query_count: (entry.query_count || 0) + 1 } : entry,
+    );
+    setProducts(nextProducts);
+    const updatedProduct = nextProducts.find((entry) => entry.id === id);
+    if (updatedProduct) {
+      void upsertProductToSupabase(updatedProduct);
+    }
+  };
+
+  const resetDemo = () => {
+    setProducts(seedProducts);
+    void Promise.allSettled(seedProducts.map((product) => upsertProductToSupabase(product)));
   };
 
   return (
@@ -50,16 +126,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       value={{
         products,
         setProducts,
-        addProduct: (p) => setProducts([p, ...products]),
-        updateProduct: (p) => setProducts(products.map((x) => (x.id === p.id ? p : x))),
-        deleteProduct: (id) => setProducts(products.filter((x) => x.id !== id)),
-        incrementQueryCount: (id) =>
-          setProducts(
-            products.map((x) =>
-              x.id === id ? { ...x, query_count: (x.query_count || 0) + 1 } : x,
-            ),
-          ),
-        resetDemo: () => setProducts(seedProducts),
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        incrementQueryCount,
+        resetDemo,
       }}
     >
       {children}

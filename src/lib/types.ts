@@ -31,6 +31,16 @@ export type ResponseSource =
   | "General support"
   | "Funny fallback";
 
+export type MissingField =
+  | "team_country_club"
+  | "kit_type"
+  | "edition_type"
+  | "size"
+  | "font_print"
+  | "source_country"
+  | "manufacturing_type"
+  | "season_year";
+
 export interface Variant {
   id: string;
   size: Size;
@@ -73,6 +83,19 @@ export interface FallbackMatch {
   reason: string;
 }
 
+export interface ConversationContext {
+  lastDetectedTeam?: string;
+  lastDetectedKitType?: KitType;
+  lastDetectedEdition?: EditionType;
+  lastDetectedSize?: Size;
+  lastDetectedFontPrint?: string;
+  lastDetectedSourceCountry?: SourceCountry;
+  lastDetectedManufacturingType?: ManufacturingType;
+  lastDetectedYear?: number;
+  lastIntent?: IntentType;
+  lastMatchedProductId?: string;
+}
+
 export interface QueryReasoning {
   original: string;
   normalized: string;
@@ -81,10 +104,12 @@ export interface QueryReasoning {
   detected_team?: string;
   detected_player?: string;
   detected_font?: string;
+  detected_font_print?: string;
   detected_year?: number;
   detected_size?: Size;
   detected_edition?: EditionType;
   detected_source?: SourceCountry;
+  detected_manufacturing_type?: ManufacturingType;
   detected_kit?: KitType;
   matched_product_id?: string;
   matched_product_name?: string;
@@ -92,5 +117,8 @@ export interface QueryReasoning {
   confidence: number;
   reason: string;
   reply: string;
+  missing_fields: MissingField[];
+  reused_context?: Partial<ConversationContext>;
+  updated_context: ConversationContext;
   candidates?: { product_id: string; name: string; score: number }[];
 }

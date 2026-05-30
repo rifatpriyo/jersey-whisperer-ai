@@ -1,8 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
-import { useStore } from "@/lib/store";
+import { ProductForm } from "@/components/ProductForm";
+import { StatusBadge, TrendBadge } from "@/components/Badges";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,43 +20,54 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { StatusBadge, TrendBadge } from "@/components/Badges";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { bdt, computeProfitMargin } from "@/lib/inventory-utils";
-import { Search, RotateCcw, Trash2 } from "lucide-react";
+import { useStore } from "@/lib/store";
+import type { Product } from "@/lib/types";
+import { Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/inventory")({
-  head: () => ({ meta: [{ title: "Inventory — JerseyBecho AI" }] }),
+  head: () => ({ meta: [{ title: "Inventory - JerseyBecho AI" }] }),
   component: InventoryPage,
 });
 
 function InventoryPage() {
-  const { products, deleteProduct, resetDemo } = useStore();
+  const { products, deleteProduct, resetDemo, updateProduct } = useStore();
   const [q, setQ] = useState("");
   const [edition, setEdition] = useState("all");
   const [mfg, setMfg] = useState("all");
   const [source, setSource] = useState("all");
   const [size, setSize] = useState("all");
   const [status, setStatus] = useState("all");
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const rows = useMemo(() => {
-    const out: any[] = [];
-    for (const p of products) {
-      for (const v of p.variants) {
-        out.push({ p, v });
+    const out: Array<{ p: Product; v: Product["variants"][number] }> = [];
+    for (const product of products) {
+      for (const variant of product.variants) {
+        out.push({ p: product, v: variant });
       }
     }
+
     return out.filter(({ p, v }) => {
       if (q) {
-        const t = q.toLowerCase();
+        const term = q.toLowerCase();
         if (
-          !p.product_name.toLowerCase().includes(t) &&
-          !p.team_country_club.toLowerCase().includes(t) &&
-          !(p.player_name || "").toLowerCase().includes(t)
-        )
+          !p.product_name.toLowerCase().includes(term) &&
+          !p.team_country_club.toLowerCase().includes(term) &&
+          !(p.player_name || "").toLowerCase().includes(term) &&
+          !(p.font_name || "").toLowerCase().includes(term)
+        ) {
           return false;
+        }
       }
       if (edition !== "all" && p.edition_type !== edition) return false;
       if (mfg !== "all" && p.manufacturing_type !== mfg) return false;
@@ -56,7 +76,7 @@ function InventoryPage() {
       if (status !== "all" && v.status !== status) return false;
       return true;
     });
-  }, [products, q, edition, mfg, source, size, status]);
+  }, [edition, mfg, products, q, size, source, status]);
 
   return (
     <>
@@ -65,8 +85,15 @@ function InventoryPage() {
         subtitle={`${rows.length} variants across ${products.length} products`}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => { resetDemo(); toast.success("Demo data reset"); }}>
-              <RotateCcw className="h-4 w-4 mr-1" /> Reset demo
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                resetDemo();
+                toast.success("Demo data reset");
+              }}
+            >
+              <RotateCcw className="mr-1 h-4 w-4" /> Reset demo
             </Button>
             <Link to="/add-product">
               <Button size="sm">+ Add product</Button>
@@ -76,10 +103,15 @@ function InventoryPage() {
       />
 
       <Card className="mb-4">
-        <CardContent className="p-4 grid md:grid-cols-6 gap-2">
-          <div className="md:col-span-2 relative">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search product / team / player" value={q} onChange={(e) => setQ(e.target.value)} />
+        <CardContent className="grid gap-2 p-4 md:grid-cols-6">
+          <div className="relative md:col-span-2">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search product / team / font / print"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+            />
           </div>
           <Select value={edition} onValueChange={setEdition}>
             <SelectTrigger><SelectValue placeholder="Edition" /></SelectTrigger>
@@ -121,21 +153,25 @@ function InventoryPage() {
             <SelectTrigger><SelectValue placeholder="Size" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sizes</SelectItem>
-              {["S","M","L","XL","XXL"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {["S", "M", "L", "XL", "XXL"].map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="overflow-x-auto p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14"></TableHead>
                 <TableHead>Product</TableHead>
                 <TableHead>Team</TableHead>
-                <TableHead>Player</TableHead>
+                <TableHead>Font / Print</TableHead>
                 <TableHead>Year</TableHead>
                 <TableHead>Kit</TableHead>
                 <TableHead>Edition</TableHead>
@@ -150,25 +186,31 @@ function InventoryPage() {
                 <TableHead>Trend</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Restock</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map(({ p, v }) => (
                 <TableRow key={`${p.id}-${v.id}`}>
                   <TableCell>
-                    <div className="h-10 w-10 rounded-md overflow-hidden bg-muted border border-border flex items-center justify-center">
+                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
                       {p.product_image_url ? (
-                        <img src={p.product_image_url} alt="" className="h-full w-full object-cover"
-                          onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+                        <img
+                          src={p.product_image_url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(event) => {
+                            (event.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">👕</span>
+                        <span className="text-[10px] text-muted-foreground">JRSY</span>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium max-w-[220px] truncate">{p.product_name}</TableCell>
+                  <TableCell className="max-w-[220px] truncate font-medium">{p.product_name}</TableCell>
                   <TableCell>{p.team_country_club}</TableCell>
-                  <TableCell>{p.player_name || "—"}</TableCell>
+                  <TableCell>{p.font_name || p.player_name || "-"}</TableCell>
                   <TableCell>{p.season_year}</TableCell>
                   <TableCell>{p.kit_type}</TableCell>
                   <TableCell>{p.edition_type}</TableCell>
@@ -178,30 +220,45 @@ function InventoryPage() {
                   <TableCell className="text-right font-mono">{v.stock_quantity}</TableCell>
                   <TableCell className="text-right font-mono">{bdt(v.buy_price)}</TableCell>
                   <TableCell className="text-right font-mono">{bdt(v.selling_price)}</TableCell>
-                  <TableCell className="text-right font-mono">{computeProfitMargin(v.buy_price, v.selling_price)}%</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {computeProfitMargin(v.buy_price, v.selling_price)}%
+                  </TableCell>
                   <TableCell><StatusBadge status={v.status} /></TableCell>
                   <TableCell><TrendBadge trend={p.trend_signal} /></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.supplier_name || "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{v.possible_restock_date || "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {p.supplier_name || "-"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {v.possible_restock_date || "-"}
+                  </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (confirm(`Delete ${p.product_name}?`)) {
-                          deleteProduct(p.id);
-                          toast.success("Product deleted");
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingProduct(p)}
+                      >
+                        <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (confirm(`Delete ${p.product_name}?`)) {
+                            deleteProduct(p.id);
+                            toast.success("Product deleted");
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={19} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={19} className="py-12 text-center text-muted-foreground">
                     No items match these filters.
                   </TableCell>
                 </TableRow>
@@ -210,6 +267,29 @@ function InventoryPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(editingProduct)} onOpenChange={(open) => !open && setEditingProduct(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>
+              Update pricing, stock, sizing, trend signal, and supplier details for this product.
+            </DialogDescription>
+          </DialogHeader>
+          {editingProduct && (
+            <ProductForm
+              key={editingProduct.id}
+              initial={editingProduct}
+              submitLabel="Save Changes"
+              onSubmit={(product) => {
+                updateProduct(product);
+                setEditingProduct(null);
+                toast.success("Product updated");
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
