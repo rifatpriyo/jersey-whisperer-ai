@@ -4,10 +4,10 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite --host 0.0.0.0 --configLoader runner",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "preview": "vite preview",
+    "preview": "vite preview --host 0.0.0.0 --configLoader runner",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
