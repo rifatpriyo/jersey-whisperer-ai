@@ -1,6 +1,60 @@
 import type { ReactNode } from "react";
 import { AppSidebar, MobileNav } from "./AppSidebar";
 import { ThemeToggle } from "./ThemeToggle";
+import { Button } from "@/components/ui/button";
+import { MessageCircle, Send } from "lucide-react";
+
+const whatsappPhone = (import.meta.env.VITE_WHATSAPP_PHONE || "").replace(/\D/g, "");
+const whatsappMessage = encodeURIComponent("Hi, I want to check jersey availability.");
+const whatsappHref = whatsappPhone
+  ? `https://wa.me/${whatsappPhone}?text=${whatsappMessage}`
+  : undefined;
+const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "")
+  .replace(/^@/, "")
+  .trim();
+const telegramHref = telegramBotUsername
+  ? `https://t.me/${telegramBotUsername}`
+  : undefined;
+
+function WhatsAppButton({ compact = false }: { compact?: boolean }) {
+  if (!whatsappHref) {
+    return null;
+  }
+
+  return (
+    <Button
+      asChild
+      size={compact ? "icon" : "sm"}
+      className="bg-[#25D366] text-white shadow hover:bg-[#1fb85a] focus-visible:ring-[#25D366]"
+      aria-label="Chat on WhatsApp"
+    >
+      <a href={whatsappHref} target="_blank" rel="noreferrer">
+        <MessageCircle className="h-4 w-4" />
+        {!compact && <span>WhatsApp</span>}
+      </a>
+    </Button>
+  );
+}
+
+function TelegramButton({ compact = false }: { compact?: boolean }) {
+  if (!telegramHref) {
+    return null;
+  }
+
+  return (
+    <Button
+      asChild
+      size={compact ? "icon" : "sm"}
+      className="bg-[#229ED9] text-white shadow hover:bg-[#1d8fc5] focus-visible:ring-[#229ED9]"
+      aria-label="Chat on Telegram"
+    >
+      <a href={telegramHref} target="_blank" rel="noreferrer">
+        <Send className="h-4 w-4" />
+        {!compact && <span>Telegram</span>}
+      </a>
+    </Button>
+  );
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -11,7 +65,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="text-sm text-muted-foreground">
             <span className="font-semibold text-foreground">JerseyBecho AI</span> · Inventory intelligence
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <WhatsAppButton />
+            <TelegramButton />
+            <ThemeToggle />
+          </div>
         </header>
         <div className="md:hidden flex items-center justify-between px-3 py-2 border-b border-border bg-background">
           <div className="text-sm font-semibold">JerseyBecho AI</div>
@@ -25,6 +83,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="font-semibold text-foreground">JerseyBecho AI</span> · Built for Infinity
           AI BuildFest 2026 · Online Commerce track
         </footer>
+        <div className="fixed bottom-4 right-4 z-40 md:hidden flex flex-col gap-2">
+          <TelegramButton compact />
+          <WhatsAppButton compact />
+        </div>
       </div>
     </div>
   );
