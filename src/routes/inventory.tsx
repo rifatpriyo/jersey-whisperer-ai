@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
-import { ProductForm } from "@/components/ProductForm";
 import { StatusBadge, TrendBadge } from "@/components/Badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +32,10 @@ import { useStore } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+const ProductForm = lazy(() =>
+  import("@/components/ProductForm").then((module) => ({ default: module.ProductForm })),
+);
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({ meta: [{ title: "Inventory - JerseyBecho AI" }] }),
@@ -95,9 +98,9 @@ function InventoryPage() {
             >
               <RotateCcw className="mr-1 h-4 w-4" /> Reset demo
             </Button>
-            <Link to="/add-product">
-              <Button size="sm">+ Add product</Button>
-            </Link>
+            <Button asChild size="sm">
+              <Link to="/add-product">+ Add product</Link>
+            </Button>
           </>
         }
       />
@@ -277,16 +280,18 @@ function InventoryPage() {
             </DialogDescription>
           </DialogHeader>
           {editingProduct && (
-            <ProductForm
-              key={editingProduct.id}
-              initial={editingProduct}
-              submitLabel="Save Changes"
-              onSubmit={(product) => {
-                updateProduct(product);
-                setEditingProduct(null);
-                toast.success("Product updated");
-              }}
-            />
+            <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading editor...</div>}>
+              <ProductForm
+                key={editingProduct.id}
+                initial={editingProduct}
+                submitLabel="Save Changes"
+                onSubmit={(product) => {
+                  updateProduct(product);
+                  setEditingProduct(null);
+                  toast.success("Product updated");
+                }}
+              />
+            </Suspense>
           )}
         </DialogContent>
       </Dialog>

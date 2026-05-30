@@ -31,8 +31,6 @@ import { forecastProduct } from "@/lib/forecast";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import {
   fetchTrendSignalsFromSupabase,
-  saveForecastScoreToSupabase,
-  seedTrendSignalsToSupabase,
   semanticProductSearchLocalFallback,
   semanticTrendSearchLocalFallback,
   type SemanticSearchHit,
@@ -40,7 +38,7 @@ import {
 } from "@/lib/supabase-service";
 import { useStore } from "@/lib/store";
 import { localTrendSignals } from "@/lib/trend-signals";
-import { Database, Search, Sparkles, TrendingUp } from "lucide-react";
+import { Database, Search, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({ meta: [{ title: "Forecast Preview - JerseyBecho AI" }] }),
@@ -82,9 +80,8 @@ function ForecastPage() {
   const { products } = useStore();
   const [trendSignals, setTrendSignals] = useState<StoredTrendSignal[]>(localTrendSignals);
   const [searchQuery, setSearchQuery] = useState("Argentina 2XL player edition");
-  const [productMatches, setProductMatches] = useState<SemanticSearchHit[]>([]);
-  const [trendMatches, setTrendMatches] = useState<SemanticSearchHit[]>([]);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const [technicalDetailsOpen, setTechnicalDetailsOpen] = useState("");
 
   const forecasts = useMemo(() => {
     try {
@@ -97,7 +94,23 @@ function ForecastPage() {
     }
   }, [products]);
 
-  const topRecommendations = forecasts.slice(0, 10);
+  const topRecommendations = useMemo(() => forecasts.slice(0, 10), [forecasts]);
+
+  const productMatches = useMemo(
+    () =>
+      technicalDetailsOpen === "technical-details"
+        ? semanticProductSearchLocalFallback(searchQuery)
+        : [],
+    [searchQuery, technicalDetailsOpen],
+  );
+
+  const trendMatches = useMemo(
+    () =>
+      technicalDetailsOpen === "technical-details"
+        ? semanticTrendSearchLocalFallback(searchQuery)
+        : [],
+    [searchQuery, technicalDetailsOpen],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -112,14 +125,6 @@ function ForecastPage() {
         const remote = await fetchTrendSignalsFromSupabase();
         if (cancelled) return;
 
-        if (remote.length === 0) {
-          const seeded = await seedTrendSignalsToSupabase(localTrendSignals);
-          if (!cancelled && seeded.length > 0) {
-            setTrendSignals(seeded);
-            return;
-          }
-        }
-
         setTrendSignals(remote.length > 0 ? remote : localTrendSignals);
       } catch {
         if (!cancelled) setTrendSignals(localTrendSignals);
@@ -132,18 +137,6 @@ function ForecastPage() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    setProductMatches(semanticProductSearchLocalFallback(searchQuery));
-    setTrendMatches(semanticTrendSearchLocalFallback(searchQuery));
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || forecasts.length === 0) return;
-    void Promise.allSettled(
-      forecasts.map((forecast) => saveForecastScoreToSupabase(forecast.product_id, forecast)),
-    );
-  }, [forecasts]);
 
   const missedInsights = useMemo(() => {
     const insights: string[] = [];
@@ -233,7 +226,7 @@ function ForecastPage() {
                         </div>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {forecast.team} · {forecast.typeLabel}
+                        {forecast.team} - {forecast.typeLabel}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Badge variant="outline" className={forecast.urgencyColor}>
@@ -249,7 +242,7 @@ function ForecastPage() {
                         </div>
                         <ul className="mt-2 space-y-1 text-sm text-foreground/90">
                           {buildSellerReasons(forecast).map((reason) => (
-                            <li key={reason}>• {reason}</li>
+                            <li key={reason}>- {reason}</li>
                           ))}
                         </ul>
                       </div>
@@ -421,7 +414,12 @@ function ForecastPage() {
 
       <Card className="mt-4">
         <CardContent className="p-5">
-          <Accordion type="single" collapsible>
+          <Accordion
+            type="single"
+            collapsible
+            value={technicalDetailsOpen}
+            onValueChange={setTechnicalDetailsOpen}
+          >
             <AccordionItem value="technical-details" className="border-b-0">
               <AccordionTrigger>Technical implementation details</AccordionTrigger>
               <AccordionContent>

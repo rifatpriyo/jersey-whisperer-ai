@@ -95,16 +95,26 @@ function DashboardPage() {
     return { totalUnits, lowStock, outOfStock, preorder, restocking, invValue, profit };
   }, [products]);
 
-  const forecasts = useMemo(
-    () => products.map(forecastProduct).sort((left, right) => right.score - left.score),
-    [products],
-  );
+  const dashboardSignals = useMemo(() => {
+    let highDemandCount = 0;
+    let restockAlertCount = 0;
+    const topAlerts: ReturnType<typeof forecastProduct>[] = [];
 
-  const highDemand = forecasts.filter((forecast) => forecast.demandSpikeScore >= 65);
-  const restockAlerts = forecasts.filter((forecast) =>
-    ["Buy Now", "Restock Soon", "Preorder / Restock"].includes(forecast.action),
-  );
-  const topTeams = [...new Set(forecasts.slice(0, 3).map((forecast) => forecast.team))].slice(0, 2);
+    for (const product of products) {
+      const forecast = forecastProduct(product);
+      if (forecast.demandSpikeScore >= 65) highDemandCount += 1;
+      if (["Buy Now", "Restock Soon", "Preorder / Restock"].includes(forecast.action)) {
+        restockAlertCount += 1;
+      }
+
+      topAlerts.push(forecast);
+      topAlerts.sort((left, right) => right.score - left.score);
+      if (topAlerts.length > 3) topAlerts.pop();
+    }
+
+    const topTeams = [...new Set(topAlerts.map((forecast) => forecast.team))].slice(0, 2);
+    return { highDemandCount, restockAlertCount, topAlerts, topTeams };
+  }, [products]);
 
   return (
     <>
@@ -171,13 +181,13 @@ function DashboardPage() {
         <Stat
           icon={Flame}
           label="High demand"
-          value={String(highDemand.length)}
+          value={String(dashboardSignals.highDemandCount)}
           accent="bg-accent text-accent-foreground"
         />
         <Stat
           icon={Brain}
           label="AI restock alerts"
-          value={String(restockAlerts.length)}
+          value={String(dashboardSignals.restockAlertCount)}
           accent="bg-primary/10 text-primary"
         />
       </div>
@@ -197,7 +207,7 @@ function DashboardPage() {
               </div>
             </div>
             <ul className="space-y-2">
-              {forecasts.slice(0, 5).map((forecast) => (
+              {dashboardSignals.topAlerts.map((forecast) => (
                 <li
                   key={forecast.product_id}
                   className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3"
@@ -227,8 +237,8 @@ function DashboardPage() {
               <SignalTile
                 title="Market Demand"
                 body={
-                  topTeams.length > 1
-                    ? `${topTeams.join(" and ")} kits are trending in BD searches this week.`
+                  dashboardSignals.topTeams.length > 1
+                    ? `${dashboardSignals.topTeams.join(" and ")} kits are trending in BD searches this week.`
                     : "Football jersey demand is active in BD searches this week."
                 }
               />
@@ -238,7 +248,7 @@ function DashboardPage() {
               />
               <SignalTile
                 title="Restock Priority"
-                body={`${restockAlerts.length} products need AI restock attention based on demand score signals.`}
+                body={`${dashboardSignals.restockAlertCount} products need AI restock attention based on demand score signals.`}
               />
               <SignalTile
                 title="Conversion Opportunity"
@@ -246,9 +256,9 @@ function DashboardPage() {
               />
             </div>
             <div className="mt-4">
-              <Link to="/forecast">
-                <Button>Open Forecast</Button>
-              </Link>
+              <Button asChild>
+                <Link to="/forecast">Open Forecast</Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

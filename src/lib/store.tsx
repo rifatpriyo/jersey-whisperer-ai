@@ -68,10 +68,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const clean = sanitize(remoteProducts);
         setProductsState(clean);
         persistLocalProducts(clean);
-        return;
       }
-
-      await Promise.allSettled(localProducts.map((product) => upsertProductToSupabase(product)));
     };
 
     void load();
