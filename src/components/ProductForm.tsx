@@ -99,7 +99,17 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
       variants: form.variants.map((v) => {
         if (v.id !== id) return v;
         const merged = { ...v, ...patch };
-        merged.status = computeStatus(merged.stock_quantity, merged.low_stock_threshold, merged.status === "Preorder");
+        const explicitStatus =
+          patch.status && !("stock_quantity" in patch) && !("low_stock_threshold" in patch)
+            ? patch.status
+            : undefined;
+        merged.status =
+          explicitStatus ||
+          computeStatus(
+            merged.stock_quantity,
+            merged.low_stock_threshold,
+            merged.status === "Preorder",
+          );
         return merged;
       }),
     });
@@ -129,8 +139,9 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
             required
             value={form.product_name}
             onChange={(e) => update("product_name", e.target.value)}
-            placeholder="e.g. Argentina Messi Home Kit 2026"
+            placeholder="e.g. Brazil 2026 WC Away Kit"
           />
+          <FieldHint>Keep this as the base jersey name only. Put Messi10/Neymar10 in Font / Print.</FieldHint>
         </div>
         <div className="space-y-1.5">
           <Label>Team / Country / Club</Label>
@@ -142,7 +153,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Player name</Label>
+          <Label>Athlete reference (optional)</Label>
           <Input
             value={form.player_name || ""}
             onChange={(e) => update("player_name", e.target.value)}
@@ -150,13 +161,13 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Font / Print name</Label>
+          <Label>Font / Print</Label>
           <Input
             value={form.font_name || ""}
             onChange={(e) => update("font_name", e.target.value)}
-            placeholder="Messi10 / Neymar10 / No print"
+            placeholder="Messi10 / Neymar10 / Blank / No print"
           />
-          <FieldHint>Player print on the back, e.g. Messi10, Cristiano7, or "No print".</FieldHint>
+          <FieldHint>Back print label, e.g. Messi10, Cristiano7, Lamine Yamal19, or Blank / No print.</FieldHint>
         </div>
         <div className="space-y-1.5">
           <Label>Has print?</Label>
@@ -271,7 +282,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
           {form.variants.map((v) => (
             <div
               key={v.id}
-              className="grid grid-cols-2 md:grid-cols-7 gap-2 items-end p-3 rounded-lg border border-border bg-muted/30"
+              className="grid grid-cols-2 md:grid-cols-8 gap-2 items-end p-3 rounded-lg border border-border bg-muted/30"
             >
               <div className="space-y-1">
                 <Label className="text-xs">Size</Label>
@@ -307,6 +318,21 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Save Product" }:
                 <div className="h-9 px-3 flex items-center text-sm rounded-md border border-input bg-background">
                   {computeProfitMargin(v.buy_price, v.selling_price)}%
                 </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Status</Label>
+                <Select
+                  value={v.status}
+                  onValueChange={(status) => updateVariant(v.id, { status: status as Variant["status"] })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Available">Available</SelectItem>
+                    <SelectItem value="Low Stock">Low Stock</SelectItem>
+                    <SelectItem value="Out of Stock">Out of Stock</SelectItem>
+                    <SelectItem value="Preorder">Preorder</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex gap-2 items-end">
                 <div className="space-y-1 flex-1">

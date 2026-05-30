@@ -185,7 +185,7 @@ export const seedProducts: Product[] = [
   },
   {
     id: crypto.randomUUID(),
-    product_name: "Brazil Neymar Retro Kit 2002",
+    product_name: "Brazil 2002 Retro Kit",
     team_country_club: "Brazil",
     player_name: "Neymar",
     font_name: "Neymar10",
@@ -208,7 +208,7 @@ export const seedProducts: Product[] = [
     id: crypto.randomUUID(),
     product_name: "Bangladesh National Team Jersey 2026",
     team_country_club: "Bangladesh",
-    font_name: "No print",
+    font_name: "Blank / No print",
     has_print: false,
     patch_available: false,
     season_year: 2026,

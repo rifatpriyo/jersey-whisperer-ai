@@ -1,0 +1,525 @@
+import type { ForecastResult } from "./forecast";
+import { forecastProduct } from "./forecast";
+import { seedProducts } from "./seed-data";
+import { supabase } from "./supabase";
+import { localTrendSignals, type LocalTrendSignal } from "./trend-signals";
+import type { Product, Variant } from "./types";
+
+const STORAGE_KEY = "jerseybecho_products_v4";
+
+export interface StoredTrendSignal extends LocalTrendSignal {
+  id?: string;
+  source?: string;
+  fetched_at?: string;
+}
+
+export interface SemanticSearchHit {
+  id: string;
+  content: string;
+  similarity: number;
+  metadata: Record<string, unknown>;
+}
+
+type ProductRow = {
+  id: string;
+  team: string;
+  type: string | null;
+  size: string | null;
+  stock: number | null;
+  wholesale_cost: number | null;
+  retail_price: number | null;
+  inquiries_7d: number | null;
+  sales_7d: number | null;
+  created_at: string | null;
+};
+
+function safeNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function average(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function safeVariants(product: Product): Variant[] {
+  return Array.isArray(product.variants) ? product.variants : [];
+}
+
+function sanitizeProduct(candidate: Partial<Product> & { id?: string }): Product {
+  return {
+    id: candidate.id ?? crypto.randomUUID(),
+    product_name: candidate.product_name ?? "Imported product",
+    team_country_club: candidate.team_country_club ?? "Unknown",
+    player_name: candidate.player_name ?? "",
+    font_name: candidate.font_name ?? "",
+    has_print: candidate.has_print ?? true,
+    patch_available: candidate.patch_available ?? false,
+    season_year: Number.isFinite(candidate.season_year) ? candidate.season_year : 2026,
+    kit_type: candidate.kit_type ?? "Home",
+    edition_type: candidate.edition_type ?? "Player Edition",
+    manufacturing_type: candidate.manufacturing_type ?? "Imported",
+    source_country: candidate.source_country ?? "Thailand",
+    supplier_name: candidate.supplier_name ?? "",
+    product_image_url: candidate.product_image_url ?? "",
+    trend_signal: candidate.trend_signal ?? "None",
+    trend_reason: candidate.trend_reason ?? "",
+    popularity_score: safeNumber(candidate.popularity_score, 60),
+    query_count: safeNumber(candidate.query_count, 0),
+    created_at: candidate.created_at ?? new Date().toISOString(),
+    variants: Array.isArray(candidate.variants) && candidate.variants.length
+      ? candidate.variants
+      : [
+          {
+            id: crypto.randomUUID(),
+            size: "M",
+            stock_quantity: 0,
+            low_stock_threshold: 3,
+            buy_price: 0,
+            selling_price: 0,
+            status: "Available",
+          },
+        ],
+  };
+}
+
+function readProductsFromBrowserStorage() {
+  if (typeof window === "undefined") return seedProducts;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return seedProducts;
+    const parsed = JSON.parse(raw) as Product[];
+    return Array.isArray(parsed) ? parsed.map((product) => sanitizeProduct(product)) : seedProducts;
+  } catch {
+    return seedProducts;
+  }
+}
+
+function summarizeProductForStorage(product: Product) {
+  const variants = safeVariants(product);
+  const sizes = variants.map((variant) => variant.size).join(", ");
+  const buyValues = variants.map((variant) => variant.buy_price);
+  const sellValues = variants.map((variant) => variant.selling_price);
+  const totalStock = variants.reduce((sum, variant) => sum + Math.max(variant.stock_quantity, 0), 0);
+
+  return {
+    id: product.id,
+    team: product.team_country_club,
+    type: JSON.stringify({
+      product_name: product.product_name,
+      team_country_club: product.team_country_club,
+      player_name: product.player_name,
+      font_name: product.font_name,
+      has_print: product.has_print,
+      patch_available: product.patch_available,
+      season_year: product.season_year,
+      kit_type: product.kit_type,
+      edition_type: product.edition_type,
+      manufacturing_type: product.manufacturing_type,
+      source_country: product.source_country,
+      supplier_name: product.supplier_name,
+      product_image_url: product.product_image_url,
+      trend_signal: product.trend_signal,
+      trend_reason: product.trend_reason,
+      popularity_score: product.popularity_score,
+      query_count: product.query_count,
+      created_at: product.created_at,
+      variants: product.variants,
+    }),
+    size: sizes || null,
+    stock: totalStock,
+    wholesale_cost: average(buyValues),
+    retail_price: average(sellValues),
+    inquiries_7d: safeNumber(product.query_count, 0),
+    sales_7d: forecastProduct(product).recentSales,
+    created_at: product.created_at,
+  };
+}
+
+function parseProductRow(row: ProductRow): Product {
+  if (row.type) {
+    try {
+      const parsed = JSON.parse(row.type) as Partial<Product>;
+      return sanitizeProduct({
+        ...parsed,
+        id: row.id,
+        team_country_club: parsed.team_country_club ?? row.team,
+        created_at: parsed.created_at ?? row.created_at ?? new Date().toISOString(),
+      });
+    } catch {
+      // Fall through to minimal reconstruction.
+    }
+  }
+
+  const size = (row.size?.split(",")[0]?.trim() || "M") as Variant["size"];
+  return sanitizeProduct({
+    id: row.id,
+    product_name: `${row.team} Jersey`,
+    team_country_club: row.team,
+    created_at: row.created_at ?? new Date().toISOString(),
+    query_count: safeNumber(row.inquiries_7d, 0),
+    variants: [
+      {
+        id: crypto.randomUUID(),
+        size,
+        stock_quantity: safeNumber(row.stock, 0),
+        low_stock_threshold: 3,
+        buy_price: safeNumber(row.wholesale_cost, 0),
+        selling_price: safeNumber(row.retail_price, 0),
+        status: safeNumber(row.stock, 0) === 0 ? "Out of Stock" : "Available",
+      },
+    ],
+  });
+}
+
+function buildProductEmbeddingContent(product: Product) {
+  const variants = safeVariants(product);
+  return [
+    product.product_name,
+    product.team_country_club,
+    product.player_name,
+    product.font_name,
+    product.kit_type,
+    product.edition_type,
+    product.manufacturing_type,
+    product.source_country,
+    variants.map((variant) => `${variant.size} stock ${variant.stock_quantity}`).join(" "),
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function buildTrendEmbeddingContent(trendSignal: StoredTrendSignal) {
+  return [
+    trendSignal.keyword,
+    trendSignal.geo,
+    trendSignal.channel,
+    trendSignal.language,
+    trendSignal.momentum,
+    trendSignal.matchedTeam,
+    trendSignal.matchedPlayer,
+    trendSignal.explanation,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+export function generateDemoEmbedding384(text: string): number[] {
+  let seed = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    seed ^= text.charCodeAt(index);
+    seed = Math.imul(seed, 16777619);
+  }
+
+  const vector: number[] = [];
+  for (let index = 0; index < 384; index += 1) {
+    seed = Math.imul(seed ^ (index + 1), 2246822519);
+    const normalized = ((seed >>> 0) / 4294967295) * 2 - 1;
+    vector.push(normalized);
+  }
+
+  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0)) || 1;
+  return vector.map((value) => Number((value / magnitude).toFixed(6)));
+}
+
+function cosineSimilarity(left: number[], right: number[]) {
+  const length = Math.min(left.length, right.length);
+  let numerator = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    numerator += left[index] * right[index];
+    leftMagnitude += left[index] * left[index];
+    rightMagnitude += right[index] * right[index];
+  }
+
+  const denominator = Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude);
+  return denominator ? numerator / denominator : 0;
+}
+
+function detectLanguage(text: string) {
+  if (/[\u0980-\u09ff]/.test(text)) return "bn";
+  if (/\b(vai|ase|ache|bd|jersey)\b/i.test(text)) return "banglish";
+  return "en";
+}
+
+export async function fetchProductsFromSupabase() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return [];
+    return (data as ProductRow[]).map((row) => parseProductRow(row));
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertProductToSupabase(product: Product) {
+  if (!supabase) return false;
+  try {
+    const row = summarizeProductForStorage(product);
+    const { error } = await supabase.from("products").upsert(row, { onConflict: "id" });
+    if (error) return false;
+    await createProductEmbeddingRecord(product);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteProductFromSupabase(productId: string) {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from("products").delete().eq("id", productId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchTrendSignalsFromSupabase(): Promise<StoredTrendSignal[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("trend_signals")
+      .select("*")
+      .order("fetched_at", { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id as string,
+      keyword: row.keyword as string,
+      geo: ((row.geo as string) || "BD") as "BD",
+      channel: ((row.channel as string) || "web") as LocalTrendSignal["channel"],
+      language: ((row.language as string) || "en") as LocalTrendSignal["language"],
+      momentum: ((row.momentum as string) || "stable") as LocalTrendSignal["momentum"],
+      growthWeight: safeNumber(row.growth_weight, 0),
+      matchedTeam: (row.matched_team as string) || undefined,
+      matchedPlayer: (row.matched_player as string) || undefined,
+      explanation: (row.explanation as string) || "",
+      source: (row.source as string) || undefined,
+      fetched_at: (row.fetched_at as string) || undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function seedTrendSignalsToSupabase(signals: LocalTrendSignal[]) {
+  if (!supabase) return [];
+  try {
+    const existing = await fetchTrendSignalsFromSupabase();
+    const existingKeys = new Set(existing.map((signal) => `${signal.keyword}::${signal.channel}`));
+    const missing = signals.filter(
+      (signal) => !existingKeys.has(`${signal.keyword}::${signal.channel}`),
+    );
+
+    if (!missing.length) return existing;
+
+    const { data, error } = await supabase
+      .from("trend_signals")
+      .insert(
+        missing.map((signal) => ({
+          keyword: signal.keyword,
+          geo: signal.geo,
+          channel: signal.channel,
+          language: signal.language,
+          momentum: signal.momentum,
+          growth_weight: signal.growthWeight,
+          matched_team: signal.matchedTeam ?? null,
+          matched_player: signal.matchedPlayer ?? null,
+          explanation: signal.explanation,
+        })),
+      )
+      .select("*");
+
+    if (!error && data) {
+      await Promise.allSettled(
+        data.map((row) =>
+          createTrendEmbeddingRecord({
+            id: row.id as string,
+            keyword: row.keyword as string,
+            geo: ((row.geo as string) || "BD") as "BD",
+            channel: ((row.channel as string) || "web") as LocalTrendSignal["channel"],
+            language: ((row.language as string) || "en") as LocalTrendSignal["language"],
+            momentum: ((row.momentum as string) || "stable") as LocalTrendSignal["momentum"],
+            growthWeight: safeNumber(row.growth_weight, 0),
+            matchedTeam: (row.matched_team as string) || undefined,
+            matchedPlayer: (row.matched_player as string) || undefined,
+            explanation: (row.explanation as string) || "",
+            source: (row.source as string) || undefined,
+            fetched_at: (row.fetched_at as string) || undefined,
+          }),
+        ),
+      );
+    }
+
+    return fetchTrendSignalsFromSupabase();
+  } catch {
+    return [];
+  }
+}
+
+export async function saveForecastScoreToSupabase(
+  productId: string,
+  scoreObject: Pick<
+    ForecastResult,
+    "demandSpikeScore" | "urgencyLabel" | "recommendation" | "breakdown"
+  >,
+) {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from("forecast_scores").insert({
+      product_id: productId,
+      demand_spike_score: scoreObject.demandSpikeScore,
+      urgency_label: scoreObject.urgencyLabel,
+      trend_score: scoreObject.breakdown.marketTrend,
+      query_score: scoreObject.breakdown.customerQueries,
+      stock_risk_score: scoreObject.breakdown.stockReductionRate,
+      margin_score: scoreObject.breakdown.profitMargin,
+      sales_velocity_score: scoreObject.breakdown.sportsNews,
+      recommendation: scoreObject.recommendation,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function saveChatLogToSupabase(
+  customerMessage: string,
+  aiReply: string,
+  matchedProductId?: string,
+) {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from("chat_logs").insert({
+      customer_message: customerMessage,
+      ai_reply: aiReply,
+      matched_product_id: matchedProductId ?? null,
+      language: detectLanguage(customerMessage),
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function createProductEmbeddingRecord(product: Product) {
+  if (!supabase) return false;
+  try {
+    const content = buildProductEmbeddingContent(product);
+    const metadata = {
+      product_name: product.product_name,
+      team: product.team_country_club,
+      kit_type: product.kit_type,
+      edition_type: product.edition_type,
+      source_country: product.source_country,
+    };
+    const embedding = generateDemoEmbedding384(content);
+
+    await supabase.from("product_embeddings").delete().eq("product_id", product.id);
+    const { error } = await supabase.from("product_embeddings").insert({
+      product_id: product.id,
+      content,
+      metadata,
+      embedding,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function createTrendEmbeddingRecord(trendSignal: StoredTrendSignal) {
+  if (!supabase) return false;
+  try {
+    let trendSignalId = trendSignal.id;
+
+    if (!trendSignalId) {
+      const { data } = await supabase
+        .from("trend_signals")
+        .select("id")
+        .eq("keyword", trendSignal.keyword)
+        .eq("channel", trendSignal.channel)
+        .limit(1)
+        .maybeSingle();
+      trendSignalId = (data?.id as string | undefined) ?? undefined;
+    }
+
+    if (!trendSignalId) return false;
+
+    const content = buildTrendEmbeddingContent(trendSignal);
+    const metadata = {
+      keyword: trendSignal.keyword,
+      matched_team: trendSignal.matchedTeam ?? null,
+      matched_player: trendSignal.matchedPlayer ?? null,
+      momentum: trendSignal.momentum,
+      source: trendSignal.source ?? "cached_google_trends_style_snapshot",
+    };
+    const embedding = generateDemoEmbedding384(content);
+
+    await supabase.from("trend_embeddings").delete().eq("trend_signal_id", trendSignalId);
+    const { error } = await supabase.from("trend_embeddings").insert({
+      trend_signal_id: trendSignalId,
+      content,
+      metadata,
+      embedding,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export function semanticProductSearchLocalFallback(query: string): SemanticSearchHit[] {
+  const queryEmbedding = generateDemoEmbedding384(query);
+  const products = readProductsFromBrowserStorage();
+
+  return products
+    .map((product) => {
+      const content = buildProductEmbeddingContent(product);
+      const similarity = cosineSimilarity(queryEmbedding, generateDemoEmbedding384(content));
+      return {
+        id: product.id,
+        content,
+        similarity,
+        metadata: {
+          product_name: product.product_name,
+          team: product.team_country_club,
+          type: `${product.kit_type} / ${product.edition_type}`,
+        },
+      };
+    })
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, 5);
+}
+
+export function semanticTrendSearchLocalFallback(query: string): SemanticSearchHit[] {
+  const queryEmbedding = generateDemoEmbedding384(query);
+
+  return localTrendSignals
+    .map((signal) => {
+      const content = buildTrendEmbeddingContent(signal);
+      const similarity = cosineSimilarity(queryEmbedding, generateDemoEmbedding384(content));
+      return {
+        id: signal.keyword,
+        content,
+        similarity,
+        metadata: {
+          keyword: signal.keyword,
+          matched_team: signal.matchedTeam ?? null,
+          matched_player: signal.matchedPlayer ?? null,
+          momentum: signal.momentum,
+        },
+      };
+    })
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, 5);
+}
