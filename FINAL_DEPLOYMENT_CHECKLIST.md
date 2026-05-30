@@ -71,3 +71,30 @@ npx vercel --prod
 /forecast
 /query-sim
 ```
+
+## Netlify Deployment
+
+Build command: `npm run build`
+
+Publish directory: `dist/client`
+
+Environment variables:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+GEMINI_API_KEY
+GROQ_API_KEY
+```
+
+`GROQ_API_KEY` is required only if used.
+
+Test after deploy:
+
+```text
+/
+/inventory
+/ai-advisor
+/forecast
+/query-sim
+```
