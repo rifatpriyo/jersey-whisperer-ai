@@ -12,6 +12,7 @@
     "preview": "vite preview --host 0.0.0.0 --configLoader runner",
     "preview:3000": "vite preview --host 0.0.0.0 --configLoader runner --port 3000",
     "preview:5173": "vite preview --host 0.0.0.0 --configLoader runner --port 5173",
+    "serve:final": "npm run build && npm run preview:5173",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

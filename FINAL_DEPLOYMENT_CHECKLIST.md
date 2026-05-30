@@ -1,56 +1,53 @@
 # Final Deployment Checklist
 
-## 1. Kill port 3000 if needed
+## Vercel Deployment Only
 
-```powershell
-netstat -ano | findstr :3000
-taskkill /PID <PID> /F
-```
-
-## 2. Run local dev
-
-```powershell
-npm run dev:3000
-```
-
-If port 3000 is busy:
-
-```powershell
-npm run dev:5173
-```
-
-## 3. Build
+1. Run the production build.
 
 ```powershell
 npm run build
 ```
 
-## 4. Commit and push
+2. Confirm the static client entry exists.
+
+```powershell
+Test-Path dist/client/index.html
+```
+
+3. Check git status.
 
 ```powershell
 git status
+```
+
+4. Stage changes.
+
+```powershell
 git add .
-git commit -m "Final JerseyBecho AI deployment build"
+```
+
+5. Commit the deployment fix.
+
+```powershell
+git commit -m "Final Vercel deployment fix"
+```
+
+6. Push to GitHub.
+
+```powershell
 git push origin main
 ```
 
-## 5. Deploy
+7. In Vercel project settings, use:
 
-```powershell
-npx vercel --prod
+```text
+Framework Preset: Vite
+Build Command: npm run build
+Output Directory: dist/client
+Install Command: npm install
 ```
 
-## 6. Vercel settings
-
-Framework Preset: Vite
-
-Build Command: `npm run build`
-
-Output Directory: `dist/client`
-
-Install Command: `npm install`
-
-## 7. Required Vercel environment variables
+8. Add Vercel environment variables.
 
 ```text
 VITE_SUPABASE_URL
@@ -59,9 +56,13 @@ GEMINI_API_KEY
 GROQ_API_KEY
 ```
 
-`GROQ_API_KEY` is required only if the Groq endpoint is used.
+9. Deploy to production.
 
-## 8. Test URLs
+```powershell
+npx vercel --prod
+```
+
+10. Test production routes.
 
 ```text
 /
