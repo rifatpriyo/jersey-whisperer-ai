@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import {
   Accordion,
@@ -40,7 +40,7 @@ import {
 } from "@/lib/supabase-service";
 import { useStore } from "@/lib/store";
 import { localTrendSignals } from "@/lib/trend-signals";
-import { Database, Search, Sparkles, TrendingUp } from "lucide-react";
+import { Database, Search, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({ meta: [{ title: "Forecast Preview - JerseyBecho AI" }] }),
@@ -82,9 +82,9 @@ function ForecastPage() {
   const { products } = useStore();
   const [trendSignals, setTrendSignals] = useState<StoredTrendSignal[]>(localTrendSignals);
   const [searchQuery, setSearchQuery] = useState("Argentina 2XL player edition");
-  const [productMatches, setProductMatches] = useState<SemanticSearchHit[]>([]);
-  const [trendMatches, setTrendMatches] = useState<SemanticSearchHit[]>([]);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const trendSeedAttemptedRef = useRef(false);
+  const savedForecastKeyRef = useRef("");
 
   const forecasts = useMemo(() => {
     try {
@@ -97,7 +97,17 @@ function ForecastPage() {
     }
   }, [products]);
 
-  const topRecommendations = forecasts.slice(0, 10);
+  const topRecommendations = useMemo(() => forecasts.slice(0, 10), [forecasts]);
+
+  const productMatches = useMemo(
+    () => semanticProductSearchLocalFallback(searchQuery),
+    [searchQuery],
+  );
+
+  const trendMatches = useMemo(
+    () => semanticTrendSearchLocalFallback(searchQuery),
+    [searchQuery],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -112,7 +122,8 @@ function ForecastPage() {
         const remote = await fetchTrendSignalsFromSupabase();
         if (cancelled) return;
 
-        if (remote.length === 0) {
+        if (remote.length === 0 && !trendSeedAttemptedRef.current) {
+          trendSeedAttemptedRef.current = true;
           const seeded = await seedTrendSignalsToSupabase(localTrendSignals);
           if (!cancelled && seeded.length > 0) {
             setTrendSignals(seeded);
@@ -134,12 +145,13 @@ function ForecastPage() {
   }, []);
 
   useEffect(() => {
-    setProductMatches(semanticProductSearchLocalFallback(searchQuery));
-    setTrendMatches(semanticTrendSearchLocalFallback(searchQuery));
-  }, [searchQuery]);
-
-  useEffect(() => {
     if (!isSupabaseConfigured || forecasts.length === 0) return;
+    const forecastKey = forecasts
+      .map((forecast) => `${forecast.product_id}:${forecast.demandSpikeScore}`)
+      .join("|");
+    if (savedForecastKeyRef.current === forecastKey) return;
+    savedForecastKeyRef.current = forecastKey;
+
     void Promise.allSettled(
       forecasts.map((forecast) => saveForecastScoreToSupabase(forecast.product_id, forecast)),
     );

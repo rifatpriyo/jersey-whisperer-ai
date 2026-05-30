@@ -1,8 +1,9 @@
-import { StrictMode } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
-import { RouterProvider } from "@tanstack/react-router";
+import { RouterProvider, createRouter } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
 
-import { getRouter } from "./router";
+import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 
 const theme = window.localStorage.getItem("jerseybecho_theme");
@@ -10,7 +11,13 @@ if (theme === "dark") {
   document.documentElement.classList.add("dark");
 }
 
-const router = getRouter();
+const queryClient = new QueryClient();
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  scrollRestoration: true,
+  defaultPreloadStaleTime: 0,
+});
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -25,7 +32,7 @@ if (!rootElement) {
 }
 
 createRoot(rootElement).render(
-  <StrictMode>
+  <React.StrictMode>
     <RouterProvider router={router} />
-  </StrictMode>,
+  </React.StrictMode>,
 );
